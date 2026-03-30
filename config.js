@@ -17,6 +17,12 @@ export default {
 	// Skip login and automatically load up the "discovery mode"
 	skipLogin: true,
 
+	// Enables client credentials login method (true=enabled, false=disabled)
+	clientCredentials: true,
+
+	// Appends a slash to the end of the redirect URL (true=append, false=don't append)
+	redirectUrlAppendSlash: false,
+
 	// Default location for maps
 	// Default to the center of the EU in Wuerzburg: 
 	// https://en.wikipedia.org/wiki/Geographical_midpoint_of_Europe#Geographic_centre_of_the_European_Union
@@ -37,7 +43,7 @@ export default {
 	snotifyDefaults: {
 		timeout: 10000,
 		titleMaxLength: 30,
-		bodyMaxLength: 120,
+		bodyMaxLength: 200,
 		showProgressBar: true,
 		closeOnClick: true,
 		pauseOnHover: true

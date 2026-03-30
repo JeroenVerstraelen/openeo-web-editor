@@ -1,16 +1,18 @@
 <template>
-	<DataTable ref="table" fa :data="data" :columns="columns" :next="next" class="CustomProcessPanel">
-		<template slot="toolbar">
-			<AsyncButton title="Store the process in the process editor on the server" :fn="addProcessFromScript" v-show="supportsCreate" :disabled="!this.hasProcess" fa confirm icon="fas fa-plus">Add</AsyncButton>
-			<SyncButton v-if="supportsList" :name="plualizedName" :sync="reloadData" />
-			<FullscreenButton :element="() => this.$el" />
-		</template>
-		<template #actions="p">
-			<AsyncButton title="Show details about this process" :fn="() => processInfo(p.row)" v-show="supportsRead" fa icon="fas fa-info"></AsyncButton>
-			<AsyncButton title="Edit this process in the process editor" confirm :fn="() => showInEditor(p.row)" v-show="supportsRead" fa icon="fas fa-project-diagram"></AsyncButton>
-			<AsyncButton title="Delete this custom process from the server" :fn="() => deleteProcess(p.row)" v-show="supportsDelete" fa icon="fas fa-trash"></AsyncButton>
-		</template>
-	</DataTable>
+	<div id="CustomProcessPanel">
+		<DataTable ref="table" fa :data="data" :columns="columns" :next="next" :missing="missing" :federation="federation" class="CustomProcessPanel">
+			<template slot="toolbar">
+				<AsyncButton title="Store the process in the process editor on the server" :fn="addProcessFromScript" v-show="supportsCreate" :disabled="!this.hasProcess" fa confirm icon="fas fa-plus">Add</AsyncButton>
+				<SyncButton v-if="supportsList" :name="pluralizedName" :sync="reloadData" />
+				<FullscreenButton :element="() => this.$el" />
+			</template>
+			<template #actions="p">
+				<AsyncButton title="Show details about this process" :fn="() => processInfo(p.row)" v-show="supportsRead" fa icon="fas fa-info"></AsyncButton>
+				<AsyncButton title="Edit this process in the process editor" confirm :fn="() => showInEditor(p.row)" v-show="supportsRead" fa icon="fas fa-project-diagram"></AsyncButton>
+				<AsyncButton title="Delete this custom process from the server" :fn="() => deleteProcess(p.row)" v-show="supportsDelete" fa icon="fas fa-trash"></AsyncButton>
+			</template>
+		</DataTable>
+	</div>
 </template>
 
 <script>
@@ -103,7 +105,7 @@ export default {
 					.then(ok => ok ? resolve() : reject())
 					.catch(reject);
 				if (fields.length > 0) {
-					this.broadcast('showDataForm', 'Store a new custom process', fields, store);
+					this.broadcast('showDataForm', 'Store a new custom process', fields, store, reject);
 				}
 				else {
 					store();

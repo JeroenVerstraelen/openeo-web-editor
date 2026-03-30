@@ -15,7 +15,7 @@
 			</label>
 		</div>
 		<div class="search-results">
-			<Collections class="category" :collections="collections" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental">
+			<Collections class="category" :collections="collections" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental" :federation="federation" :missing="federationMissing.collections">
 				<template #summary="{ item }">
 					<div class="discovery-entity" :draggable="supportsLoadCollection" @dragstart="onDrag($event, 'collection', item)">
 						<div class="discovery-info" @click="showCollectionInfo(item.id)">
@@ -27,7 +27,7 @@
 				</template>
 			</Collections>
 
-			<Processes class="category" :processes="allProcesses" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental">
+			<Processes class="category" :processes="allProcesses" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental" :federation="federation" :missing="federationMissing.processes">
 				<template #summary="{ item }">
 					<div class="discovery-entity" draggable="true" @dragstart="onDrag($event, 'process', item)">
 						<div class="discovery-info" @click="showProcess(item)">
@@ -40,10 +40,10 @@
 				</template>
 			</Processes>
 
-			<UdfRuntimes v-if="hasUdfRuntimes" class="category" :runtimes="udfRuntimes" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental">
+			<UdfRuntimes v-if="hasUdfRuntimes" class="category" :runtimes="udfRuntimes" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental" :federation="federation">
 				<template #summary="{ summary, item }">
 					<div class="discovery-entity" :draggable="supportsRunUdf" @dragstart="onDrag($event, 'udf', {runtime: summary.identifier, version: item.default})">
-						<div class="discovery-info" @click="showUdfInfo(summary.identifier, item)">
+						<div class="discovery-info" @click="showUdfRuntime(summary.index)">
 							<strong :title="summary.identifier">{{ summary.identifier }} ({{ item.default }})</strong>
 							<small v-if="summary.summary" :title="summary.summary">{{ summary.summary }}</small>
 						</div>
@@ -51,10 +51,10 @@
 				</template>
 			</UdfRuntimes>
 
-			<FileFormats class="category" :formats="fileFormats" :showInput="false" heading="Export File Formats" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental">
+			<FileFormats class="category" :formats="fileFormats" :showInput="false" heading="Export File Formats" :searchTerm="searchTerm" :offerDetails="false" :collapsed="collapsed" :hideDeprecated="!showDeprecated" :hideExperimental="!showExperimental" :federation="federation" :missing="federationMissing.fileFormats">
 				<template #summary="{ item }">
 					<div class="discovery-entity" :draggable="supportsSaveResult" @dragstart="onDrag($event, 'fileformat', item)">
-						<div class="discovery-info" @click="showFileFormatInfo(item)">
+						<div class="discovery-info" @click="showOutputFileFormat(item)">
 							<strong :title="item.name">{{ item.name }}</strong>
 							<small v-if="item.title" :title="item.title">{{ item.title }}</small>
 						</div>
@@ -109,7 +109,8 @@ export default {
 	computed: {
 		...Utils.mapState(['collections', 'udfRuntimes']),
 		...Utils.mapState('editor', ['discoverySearchTerm']),
-		...Utils.mapGetters(['supports', 'fileFormats', 'processes']),
+		...Utils.mapState(['federationMissing']),
+		...Utils.mapGetters(['federation', 'supports', 'fileFormats', 'processes']),
 		supportsLoadCollection() {
 			return this.processes.has('load_collection');
 		},
@@ -182,16 +183,12 @@ export default {
 		showProcess(process) {
 			this.broadcast('showProcess', process);
 		},
-		showUdfInfo(id, data) {
-			this.broadcast('showModal', 'UdfRuntimeModal', {id, data, version: data.default});
+		showUdfRuntime(runtime) {
+			this.broadcast('showUdfRuntime', runtime);
 		},
-		showFileFormatInfo(format) {
-			let props = {
-				id: format.name,
-				format: this.fileFormats.output[format.name],
-				type: "output"
-			};
-			this.broadcast('showModal', 'FileFormatModal', props);
+		showOutputFileFormat(format) {
+			const id = format.id.replace(/-output$/, '');
+			this.broadcast('showOutputFileFormat', id);
 		}
 	}
 }
@@ -220,7 +217,7 @@ export default {
 </style>
 
 <style lang="scss" scoped>
-@import '../../theme.scss';
+@use '../../theme' as *;
 
 .discovery-toolbar {
 	width: 100%;
@@ -259,7 +256,7 @@ export default {
 }
 
 .category {
-	margin: 0.75rem 1rem 0.5rem 1rem;
+	margin: 0.5rem 1rem 0.5rem 1rem;
 
 	strong {
 		cursor: pointer;

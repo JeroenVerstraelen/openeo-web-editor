@@ -35,19 +35,38 @@
 									<i class="fas fa-info-circle"></i>
 									<span>{{ tab.data.description }}</span>
 								</div>
-								<template v-if="!hasPredefinedOidcClientId">
+								<div v-if="clientCredentials" class="row method">
+									<label for="oidcGrant">Login method:</label>
+									<select id="oidcGrant" class="input" v-model="oidcGrant">
+										<option value="">User Credentials (default)</option>
+										<option value="client_credentials">Client Credentials</option>
+									</select>
+								</div>
+								<template v-if="clientCredentials && oidcGrant === 'client_credentials'">
 									<div class="row">
-										<label for="password">Client ID:</label>
-										<input type="text" class="input" v-model.trim="userOidcClientId" required="required" />
+										<label for="ccClientId">Client ID:</label>
+										<input type="text" id="ccClientId" class="input" v-model.trim="clientCredentialsId" required />
 									</div>
-									<div class="row help">
-										<i class="fas fa-exclamation-circle"></i>
-										<span>You need to specify the <em>Client ID</em> provided to you by the provider. You need to allow the <a :href="oidcRedirectUrl" target="_blank" :title="oidcRedirectUrl">URL of this service</a> as redirect URL with the authentication service.</span>
+									<div class="row">
+										<label for="ccClientSecret">Client Secret:</label>
+										<input type="password" id="ccClientSecret" class="input" v-model.trim="clientCredentialsSecret" required />
 									</div>
+								</template>
+								<template v-else>
+									<template v-if="!hasPredefinedOidcClientId">
+										<div class="row">
+											<label for="password">Client ID:</label>
+											<input type="text" class="input" v-model.trim="userOidcClientId" required="required" />
+										</div>
+										<div class="row help">
+											<i class="fas fa-exclamation-circle"></i>
+											<span>You need to specify the <em>Client ID</em> provided to you by the provider. You need to allow the <a :href="oidcRedirectUrl" target="_blank" :title="oidcRedirectUrl">URL of this service</a> as redirect URL with the authentication service.</span>
+										</div>
+									</template>
 								</template>
 								<div class="row bottom">
 									<TermsOfServiceConsent />
-									<div class="row help">
+									<div class="row help" v-if="oidcGrant !== 'client_credentials'">
 										<i class="fas fa-window-restore"></i>
 										<span>Clicking the button below may open a new window for login.</span>
 									</div>
@@ -59,7 +78,7 @@
 							<form @submit.prevent="initDiscovery(tab.data)">
 								<div class="row help">
 									<i class="fas fa-info-circle"></i>
-									<span>The <tt>HTTP Basic</tt> authentication method is mostly used for development and testing purposes.</span>
+									<span>The <code>HTTP Basic</code> authentication method is mostly used for development and testing purposes.</span>
 								</div>
 								<div class="row">
 									<label for="username">Username:</label>
@@ -103,6 +122,11 @@ import Tab from '@openeo/vue-components/components/Tab.vue';
 import TermsOfServiceConsent from './TermsOfServiceConsent.vue';
 import Utils from '../utils.js';
 import { OidcProvider } from '@openeo/js-client';
+import Config from '../../config.js';
+
+if (Config.redirectUrlAppendSlash && !OidcProvider.redirectUrl.endsWith('/')) {
+	OidcProvider.redirectUrl += '/';
+}
 
 export default {
 	name: 'ConnectForm',
@@ -190,6 +214,10 @@ export default {
 			loading: false,
 			message: this.$config.loginMessage,
 			userOidcClientId: '',
+			oidcGrant: '',
+			clientCredentials: this.$config.clientCredentials || false,
+			clientCredentialsId: '',
+			clientCredentialsSecret: '',
 			oidcOptions: {
 				automaticSilentRenew: true,
 				popupWindowFeatures: `location=no,toolbar=no,width=${w},height=${h},left=${l},top=${t}`
@@ -198,7 +226,8 @@ export default {
 		};
 	},
 	async created() {
-		var serverFromQuery = Utils.param('server');
+		const params = Utils.params();
+		const serverFromQuery = params.get('server');
 		if (!this.$config.serverUrl && serverFromQuery) {
 			this.serverUrl = serverFromQuery;
 		}
@@ -209,7 +238,7 @@ export default {
 
 		// Allow enforcing a re-login with e.g. 'prompt=login' parameter on authentication request.
 		// See https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
-		let prompt = Utils.param('oidc~prompt');
+		let prompt = params.get('oidc~prompt');
 		if (['none', 'login', 'consent', 'select_account'].includes(prompt)) {
 			this.oidcOptions.prompt = prompt;
 		}
@@ -223,6 +252,8 @@ export default {
 				Utils.exception(this, error);
 			}
 		}
+
+		this.checkClientCredentials();
 	},
 	mounted() {
 		window.onpopstate = evt => this.historyNavigate(evt);
@@ -236,6 +267,16 @@ export default {
 		...Utils.mapActions(['connect', 'discover', 'logout']),
 		...Utils.mapMutations(['reset']),
 		...Utils.mapMutations('editor', ['addServer', 'removeServer']),
+
+		async checkClientCredentials() {
+			if (!this.$config.clientCredentials || !this.provider) {
+				return;
+			}
+			const supported = await this.provider.supportsClientCredentials();
+			if (supported !== null) {
+				this.clientCredentials = supported;
+			}
+		},
 
 		isLocalUrl(url) {
 			return Boolean(
@@ -337,6 +378,9 @@ export default {
 					if (skipLogin) {
 						await this.initDiscovery();
 					}
+					else if (await this.tryResumeSession()) {
+						await this.initDiscovery();
+					}
 				}
 				else {
 					Utils.exception(this, this.connectionError);
@@ -351,6 +395,36 @@ export default {
 			}
 		},
 
+		addOidcListeners(provider) {
+			provider.addListener('AccessTokenExpired', () => Utils.warn(this, "User session has expired, please login again."));
+			provider.addListener('SilentRenewError', () => Utils.error(this, "You'll be switching to Guest mode in less than a minute.", "Session renewal failed"));
+		},
+
+		async tryResumeSession() {
+			for (const provider of this.oidcProviders) {
+				const clientId = this.$config.oidcClientIds[provider.id];
+				if (clientId) {
+					provider.setClientId(clientId);
+				}
+				else if (!provider.defaultClient) {
+					continue;
+				}
+
+				try {
+					const resumed = await provider.resume(this.oidcOptions);
+					if (resumed) {
+						this.provider = provider;
+						this.addOidcListeners(provider);
+						return true;
+					}
+				}
+				catch (error) {
+					console.warn('Failed to resume OIDC session for provider ' + provider.getId(), error);
+				}
+			}
+			return false;
+		},
+
 		async initDiscovery(provider = null) {
 			this.loading = true;
 			let authType = Utils.isObject(provider) && typeof provider.getType() === 'string' ? provider.getType() : null;
@@ -359,17 +433,24 @@ export default {
 					await provider.login(this.username, this.password);
 				}
 				else if (authType === 'oidc') {
-					let offlineScope = true;
-					if (this.oidcClientId) {
-						this.provider.setClientId(this.oidcClientId);
+					if (this.oidcGrant === 'client_credentials' && this.clientCredentials) {
+						provider.setGrant('client_credentials');
+						provider.setClientId(this.clientCredentialsId);
+						provider.setClientSecret(this.clientCredentialsSecret);
+						await provider.login();
 					}
 					else {
-						const client = provider.detectDefaultClient();
-						offlineScope = client && Array.isArray(client.grant_types) && client.grant_types.includes('refresh_token');
+						let offlineScope = true;
+						if (this.oidcClientId) {
+							this.provider.setClientId(this.oidcClientId);
+						}
+						else {
+							const client = provider.detectDefaultClient();
+							offlineScope = client && Array.isArray(client.grant_types) && client.grant_types.includes('refresh_token');
+						}
+						await provider.login(this.oidcOptions, offlineScope);
+						this.addOidcListeners(provider);
 					}
-					await provider.login(this.oidcOptions, offlineScope);
-					provider.addListener('AccessTokenExpired', () => Utils.warn(this, "User session has expired, please login again."));
-					provider.addListener('SilentRenewError', () => Utils.error(this, "You'll be switching to Guest mode in less than a minute.", "Session renewal failed"));
 				}
 				else { // noauth/discovery
 					window.history.pushState({reset: true, serverUrl: this.serverUrl, autoConnect: true, skipLogin: true}, "", this.makeUrl(true, true));
@@ -405,7 +486,7 @@ export default {
 		},
 
 		makeUrl(server = true, discover = false) {
-			let params = new URLSearchParams(window.location.search);
+			let params = Utils.params();
 			if (server && !this.$config.serverUrl) {
 				params.set('server', this.serverUrl);
 			}
@@ -455,7 +536,7 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-@import '../../theme.scss';
+@use '../../theme' as *;
 
 .connectPage {
 	background-color: $mainColor;
@@ -480,7 +561,6 @@ export default {
 	border: 1px solid black;
 	border-radius: 3em;
 	padding: 2.5em 3em;
-	font-family: 'Ubuntu', sans-serif;
 }
 .connectContainer .helpBtn {
 	float: right;
@@ -519,10 +599,10 @@ label {
 .input input {
 	flex-grow: 1;
 }
-input {
+input, select {
 	padding: 0.3em;
 }
-input, button {
+input, button, select {
 	margin: 3px;
 }
 .connectBtn {
@@ -564,6 +644,9 @@ input, button {
 }
 #credentials.tabs form > div {
 	flex-grow: 1;
+}
+#credentials.tabs form > div.method {
+	flex-grow: 0;
 }
 #credentials.tabs form > div.bottom {
 	justify-content: flex-end;

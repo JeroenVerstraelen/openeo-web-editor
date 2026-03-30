@@ -19,6 +19,7 @@
 import EventBusMixin from './components/EventBusMixin.js';
 import Utils from './utils';
 import ConnectForm from './components/ConnectForm.vue';
+import "fontsource-ubuntu/index.css";
 
 export default {
 	name: 'openeo-web-editor',
@@ -58,18 +59,19 @@ export default {
 		};
 	},
 	created() {
-		this.addProcessNamespacesToRequest(Utils.param('namespaces'));
-		this.setInitialProcess(Utils.param('process'));
-		this.setInitialNode(Utils.param('edit-node'));
+		const params = Utils.params();
+		this.addProcessNamespacesToRequest(params.get('namespaces'));
+		this.setInitialProcess(params.get('process'));
+		this.setInitialNode(params.get('edit-node'));
 		this.setOpenWizard({
-			component: Utils.param('wizard'),
+			component: params.get('wizard'),
 			options: Utils.paramsForPrefix('wizard')
 		});
-		this.setCollectionPreview(Utils.param('preview-collection'));
+		this.setCollectionPreview(params.get('preview-collection'));
 
-		const resultUrl = Utils.param('result');
+		const resultUrl = params.get('result');
 		let resultType = 'job';
-		if (Utils.param('app~service')) {
+		if (params.get('app~service')) {
 			resultType = 'service';
 		}
 		if (resultUrl) {
@@ -80,7 +82,7 @@ export default {
 			});
 		}
 
-		const discover = Utils.param('discover');
+		const discover = params.get('discover');
 		if (discover === "1" || resultUrl) {
 			this.skipLogin = true;
 		}
@@ -111,7 +113,10 @@ export default {
 		this.listen('showCollection', this.showCollection);
 		this.listen('showProcess', this.showProcess);
 		this.listen('showProcessParameter', this.showProcessParameter);
+		this.listen('showUdfRuntime', this.showUdfRuntime);
+		this.listen('showOutputFileFormat', this.showOutputFileFormat);
 		this.listen('showWebEditorInfo', this.showWebEditorInfo);
+		this.listen('showServerInfo', this.showServerInfo);
 		this.listen('title', this.setTitle);
 		this.listen('showTour', where => this.tourType = where);
 		this.listen('stopTour', this.stopTour);
@@ -128,8 +133,8 @@ export default {
 		}
 	},
 	computed: {
-		...Utils.mapState(['activeRequests']),
-		...Utils.mapGetters(['isDiscovered']),
+		...Utils.mapState(['activeRequests', 'udfRuntimes']),
+		...Utils.mapGetters(['isDiscovered', 'fileFormats']),
 		...Utils.mapState('editor', ['hightestModalZIndex']),
 	},
 	methods: {
@@ -169,27 +174,78 @@ export default {
 		showWebEditorInfo() {
 			this.showModal('WebEditorModal');
 		},
+		showServerInfo() {
+			Utils.replaceUrlParam('server-info', 1);
+			this.showModal(
+				'ServerInfoModal',
+				{},
+				{ closed: () => Utils.replaceUrlParam('server-info') }
+			);
+		},
 		showError(error) {
 			this.showModal('ErrorModal', {error});
 		},
 		async showCollection(id) {
 			try {
-				let collection = await this.describeCollection(id);
-				this.showModal('CollectionModal', {collection});
+				const collection = await this.describeCollection(id);
+				this.showModal(
+					'CollectionModal',
+					{collection},
+					{closed: () => Utils.replaceUrlParam('collection')}
+				);
+				Utils.replaceUrlParam('collection', id);
 			} catch (error) {
 				console.log(error);
 				Utils.error(this, "Sorry, can't load collection details for '" + id + "'.");
 			}
 		},
-		async showProcess(process) {
+		async showProcess(data) {
 			try {
-				this.showModal('ProcessModal', {
-					process: await this.loadProcess(process)
-				});
+				let id = data.id;
+				if (data.namespace && data.namespace !== "backend") {
+					id += "@" + data.namespace;
+				}
+				const process = await this.loadProcess(data);
+				if (!process) {
+					Utils.error(this, `Sorry, process with id '${id}' could not be found.`);
+					return;
+				}
+				this.showModal(
+					'ProcessModal',
+					{ process },
+					{ closed: () => Utils.replaceUrlParam('process-id') }
+				);
+				Utils.replaceUrlParam('process-id', id);
 			} catch (error) {
 				console.log(error);
 				Utils.error(this, "Sorry, can't load process details.");
 			}
+		},
+		showUdfRuntime(id) {
+			const data = this.udfRuntimes[id];
+			if (!data) {
+				Utils.error(this, `A UDF runtime with id '${id}' does not exist.`);
+				return;
+			}
+			this.showModal(
+				'UdfRuntimeModal',
+				{ id, data, version: data.default },
+				{ closed: () => Utils.replaceUrlParam('udf-runtime') }
+			);
+			Utils.replaceUrlParam('udf-runtime', id);
+		},
+		showOutputFileFormat(id) {
+			const format = this.fileFormats.output[id];
+			if (!format) {
+				Utils.error(this, `An output file format with id '${id}' does not exist.`);
+				return;
+			}
+			this.showModal(
+				'FileFormatModal',
+				{ id, format, type: "output" },
+				{ closed: () => Utils.replaceUrlParam('file-format') }
+			);
+			Utils.replaceUrlParam('file-format', id);
 		},
 		async showData(data, title) {
 			this.showModal('DataModal', {data, title});
@@ -202,8 +258,7 @@ export default {
 </script>
 
 <style lang="scss">
-@import 'https://fonts.googleapis.com/css?family=Ubuntu&display=swap';
-@import '../theme.scss';
+@use '../theme' as *;
 
 html, body, .container {
 	height: 100%;
@@ -329,8 +384,10 @@ kbd {
 .vue-component .tabular {
 	margin: 0.5em 0;
 }
-.vue-component .tabular .value ul {
-	padding-left: 20px;
+.vue-component .tabular .value {
+	ul, ol {
+		padding-left: 20px;
+	}
 }
 
 .container {
@@ -338,11 +395,11 @@ kbd {
 	height: 100%;
 }
 .container .snotifyToast__title {
-	font-size: 1em;
+	font-size: 0.95em;
 	font-weight: bold;
 }
 .container .snotifyToast__body {
-	font-size: 0.9em;
+	font-size: 0.85em;
 }
 
 p.aboutPage {
@@ -425,8 +482,20 @@ h3.aboutPage {
 	}
 }
 .sourceToolbar {
-	text-align: right;
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
 }
+.sourceToolbar .text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: inline !important;
+}
+.sourceToolbar.compact .text {
+	display: none !important;
+}
+
 .tabContent > .textEditor {
 	border: 0 !important;
 }

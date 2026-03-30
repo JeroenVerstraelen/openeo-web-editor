@@ -19,11 +19,17 @@
 						<Pane id="editor" :size="splitpaneSizeV[0]">
 							<Editor ref="editor" class="mainEditor tour-ide-editor" id="main" :value="process" @input="updateEditor" :title="contextTitle" showIntro>
 								<template #file-toolbar>
-									<BButton @click="importProcess" title="Import a process from an external source"><i class="fas fa-cloud-download-alt"></i></BButton>
-									<AsyncButton v-show="saveSupported" :disabled="!hasProcess" :fn="saveProcess" :title="'Save this process to ' + contextTitle" fa confirm icon="fas fa-save"></AsyncButton>
-									<BButton @click="exportJSON" :disabled="!hasProcess" title="Download this process as a JSON file"><i class="fas fa-file-download"></i></BButton>
-									<BButton @click="exportCode" :disabled="!hasProcess" title="Export this process into another programming language"><i class="fas fa-file-export"></i></BButton>
-									<AsyncButton v-show="validateSupported" :disabled="!hasProcess" :fn="validateProcess" title="Validate this process directly on the server" fa confirm icon="fas fa-tasks"></AsyncButton>
+									<BButton @click="importProcess" title="Import a process from an external source">
+										<i class="fas fa-cloud-download-alt"></i> <span class="text">Import</span>
+									</BButton>
+									<AsyncButton v-show="saveSupported" :disabled="!hasProcess" :fn="saveProcess" :title="'Save this process to ' + contextTitle" fa confirm icon="fas fa-save">Save</AsyncButton>
+									<BButton @click="exportJSON" :disabled="!hasProcess" title="Download this process as a JSON file">
+										<i class="fas fa-file-download"></i> <span class="text">Download</span>
+									</BButton>
+									<BButton @click="exportCode" :disabled="!hasProcess" title="Export this process into another programming language">
+										<i class="fas fa-file-export"></i> <span class="text">Code Export</span>
+									</BButton>
+									<AsyncButton v-show="validateSupported" :disabled="!hasProcess" :fn="validateProcess" title="Validate this process directly on the server" fa confirm icon="fas fa-tasks">Validate</AsyncButton>
 								</template>
 							</Editor>
 						</Pane>
@@ -58,6 +64,7 @@ import { Job, Service, UserProcess } from '@openeo/js-client';
 import { Splitpanes, Pane } from 'splitpanes';
 import BButton from '@openeo/vue-components/components/internal/BButton.vue';
 import AsyncButton from '@openeo/vue-components/components/internal/AsyncButton.vue';
+import 'splitpanes/dist/splitpanes.css';
 
 export default {
 	name: 'IDE',
@@ -84,7 +91,7 @@ export default {
 	computed: {
 		...Utils.mapState(['connection', 'isAuthenticated']),
 		...Utils.mapState('editor', ['appMode', 'context', 'process', 'collectionPreview', 'openWizard', 'openWizardProps']),
-		...Utils.mapGetters(['title', 'apiVersion', 'supports']),
+		...Utils.mapGetters(['title', 'apiVersion', 'supports', 'federation']),
 		...Utils.mapGetters('editor', ['hasProcess']),
 		...Utils.mapGetters('jobs', {supportsJobUpdate: 'supportsUpdate'}),
 		...Utils.mapGetters('services', {supportsServiceUpdate: 'supportsUpdate'}),
@@ -158,6 +165,25 @@ export default {
 		if (this.openWizard) {
 			this.showWizard(this.openWizard, this.openWizardProps);
 		}
+
+		const params = Utils.params();
+		if (params.has('collection')) {
+			this.broadcast('showCollection', params.get('collection'));
+		}
+		if (params.has('process-id')) {
+			const pid = params.get('process-id');
+			const [id, namespace] = Utils.extractUDPParams(pid);
+			this.broadcast('showProcess', {id, namespace});
+		}
+		if (params.has('udf-runtime')) {
+			this.broadcast('showUdfRuntime', params.get('udf-runtime'));
+		}
+		if (params.has('file-format')) {
+			this.broadcast('showOutputFileFormat', params.get('file-format'));
+		}
+		if (params.get('server-info') === '1') {
+			this.broadcast('showServerInfo');
+		}
 	},
 	beforeDestroy() {
 		if (this.resizeListener !== null) {
@@ -225,13 +251,38 @@ export default {
 				return true;
 			}
 			try {
+				let isFederated = Utils.size(this.connection.capabilities().toJSON().federation) > 0;
 				let errors = await this.connection.validateProcess(this.process);
 				if (errors.length > 0) {
+					// log entries require a `level` attribute
 					errors.forEach(error => error.level = 'error');
-					this.broadcast('viewLogs', errors, 'Validation Result', 'fa-tasks');
+					// build applicable message and possibly add it to the `errors` object so that it shows up in the logs
+					let toastMessage, logMessage;
+					if(isFederated) {
+						if(Array.isArray(errors['federation:backends']) && errors['federation:backends'].length > 0) {
+							let backendTitles = errors['federation:backends'].map(backendId => this.federation[backendId].title);
+							toastMessage = "The process is invalid (see logs for details)"
+							logMessage = "The process is invalid, as checked by these back-ends of the federation: " + backendTitles.join(', ');
+						} else {
+							toastMessage = "The process could not be validated successfully by any of the back-ends or the federation component itself";
+							logMessage = toastMessage;
+						}
+						let logEntry = {
+							id: 'InsertedByWebEditor',
+							message: logMessage,
+							level: 'info'
+						};
+						errors = [logEntry, ...errors];   // like this instead of .push() to prepend instead of append (loses the federation:backends attribute but that's okay at this point)
+					} else {
+						toastMessage = "The process is invalid";
+					}
+					// notify via toast and show errors in logs area
+					Utils.error(this, toastMessage);
+					this.broadcast('viewLogs', errors, 'Validation Result', true, 'fa-tasks');
 					return false;
 				}
 				else {
+					// only notify via toast and ignore potential information in `errors['federation:backends']` because it's not so important in the positive case and the space in the toast is limited
 					Utils.ok(this, "The process is valid");
 					return true;
 				}
@@ -257,7 +308,7 @@ export default {
 		},
 
 		showServerInfo() {
-			this.broadcast('showModal', 'ServerInfoModal');
+			this.broadcast('showServerInfo');
 		},
 
 		showHelp() {
@@ -265,24 +316,24 @@ export default {
 		},
 
 		showDataForm(title, fields, saveCallback = null, closeCallback = null) {
-			var editable = typeof saveCallback === 'function';
-			var data = {};
-			var parameters = [];
+			const editable = typeof saveCallback === 'function';
+			const data = {};
+			const parameters = [];
 			for(let field of fields) {
-				if (field === null) {
+				if (!field) {
 					continue;
 				}
 				parameters.push(new ProcessParameter(field));
 				data[field.name] = field.value;
 			}
 	
-			let props = {
+			const props = {
 				title,
 				parameters,
 				data,
 				editable
 			};
-			let events = {};
+			const events = {};
 			if (typeof saveCallback === 'function') {
 				events.save = saveCallback;
 			}
@@ -297,8 +348,7 @@ export default {
 </script>
 
 <style lang="scss">
-@import '../../theme.scss';
-@import '~splitpanes/dist/splitpanes.css';
+@use '../../theme' as *;
 
 .splitpanes.default-theme {
   .splitpanes__pane {

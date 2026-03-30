@@ -27,6 +27,11 @@ You can use some query parameters to set initial state to the Editor.
 
 * `server`: Set a openEO back-end to connect to by default, e.g. `https://earthengine.openeo.org`
 * `discover`: If you want to skip authentication and just show the capabilities of the back-end, simply set to `1`.
+* `collection`: Shows the collection information for the given ID.
+* `process-id`: Shows the process information for the given ID. You can also pass an ID with a namespace (format: `process@namespace`).
+* `udf-runtime`: Shows the UDF runtime information for the given identifier.
+* `file-format`: Shows the output file format information for the given identifier.
+* `server-info`: Shows the server information modal. Value must be set to `1`.
 * `process`: Loads a process from a URL and shows it in the Model Builder. You can also pass a single process name with an optional namespace to the parameter (format: `process@namespace`) to simply add a single process node for that process by default.
 * `namespaces`: Loads an additional process namespaces. Multiple namespaces can be separated by a comma (e.g. `vector,sar`).
 * `edit-node`: Opens the parameter editor for a single process node on start-up. Must have the `process` parameter being set, otherwise will be ignored. You can set two types of values:
@@ -36,7 +41,7 @@ You can use some query parameters to set initial state to the Editor.
   * Usecase "Run UDP": For `wizard=UDP` you can provide a process in the query parameter `wizard~process` which has the same format as in `process` above and will open a wizard for this UDP.
 * `preview-collection`: Shows the preview of a Collection on the map upon start.
 * `result`: Loads a STAC Item or Collection in "App mode".
-* `oidc~prompt`: Set the `prompt` parameter for the [OIDC authentication request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest). For example: use value `login` to enforce a (re)login with the OIDC provider.
+* `oidc~prompt` (deprecated): Set the `prompt` parameter for the [OIDC authentication request](https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest). For example: use value `login` to enforce a (re)login with the OIDC provider.
 
 Example: <https://editor.openeo.org?server=https://earthengine.openeo.org&discover=1&process=https://raw.githubusercontent.com/Open-EO/openeo-earthengine-driver/master/tests/data/sample-processgraph.json>
 
@@ -81,7 +86,7 @@ After successful startup, the webeditor can be reached locally at http://127.0.0
 More startup information can be seen at the [official nginx docker image](https://hub.docker.com/_/nginx/) which is used.
 
 ### Use image from Dockerhub
-The same Docker Image is built and pushed to Dockerhub with the help of a github action. It is available [here](https://hub.docker.com/repository/docker/mundialis/openeo-web-editor).
+The same Docker Image is built and pushed to Dockerhub with the help of a github action. It is available [here](https://hub.docker.com/r/mundialis/openeo-web-editor).
 
 To use it locally, run
 ```

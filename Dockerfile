@@ -1,4 +1,4 @@
-FROM node:16-alpine as build
+FROM node:22-alpine AS build
 
 ARG environment
 
@@ -11,5 +11,5 @@ RUN npm install
 RUN npm run build-$environment
 
 # Copy build folder and run with nginx
-FROM nginx:1.20.1-alpine
+FROM nginx:1.28.0-alpine
 COPY --from=build /src/openeo-web-editor/dist /usr/share/nginx/html

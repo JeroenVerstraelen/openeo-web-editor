@@ -9,7 +9,7 @@ export default (namespace, singular, plural, loadInitially = true) => {
 		data() {
 			return {
 				name: singular,
-				plualizedName: plural,
+				pluralizedName: plural,
 				syncTimer: null,
 				lastSyncTime: null
 			};
@@ -23,8 +23,9 @@ export default (namespace, singular, plural, loadInitially = true) => {
 			this.stopSyncTimer();
 		},
 		computed: {
+			...Utils.mapGetters(['federation']),
 			...Utils.mapState(namespace, {data: namespace}),
-			...Utils.mapState(namespace, ['pages', 'hasMore']),
+			...Utils.mapState(namespace, ['missing', 'pages', 'hasMore']),
 			...Utils.mapGetters(namespace, ['supportsList', 'supportsCreate', 'supportsRead', 'supportsUpdate', 'supportsDelete']),
 			next() {
 				return this.hasMore ? this.nextPage : null;
