@@ -99,7 +99,10 @@ export default {
 	processNamespaces: [],
 
 	// Key is the OIDC provider id, value is the client ID
-	oidcClientIds: {},
+	oidcClientIds: {
+		"CDSE": "sh-b1c3a958-52d4-40fe-a333-153595d1c71e",
+		"CDSE-staging": "sh-b1c3a958-52d4-40fe-a333-153595d1c71e"
+	},
 
 	// Show a warning if HTTP is used instead of HTTPS
 	showHttpWarning: true,
