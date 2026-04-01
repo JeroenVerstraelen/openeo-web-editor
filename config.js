@@ -12,7 +12,7 @@ export default {
 	// The name of the service
 	serviceName: 'Copernicus Data Space Ecosystem',
 	// The name of the app
-  appName: process.env.VUE_APP_APP_NAME,
+  	appName: process.env.VUE_APP_APP_NAME,
 
 	// Skip login and automatically load up the "discovery mode"
 	skipLogin: true,
@@ -100,8 +100,8 @@ export default {
 
 	// Key is the OIDC provider id, value is the client ID
 	oidcClientIds: {
-		"CDSE": "sh-b1c3a958-52d4-40fe-a333-153595d1c71e",
-		"CDSE-staging": "sh-b1c3a958-52d4-40fe-a333-153595d1c71e"
+		"CDSE": process.env.VUE_APP_CDSE_OIDC_CLIENT_ID,
+		"CDSE-staging":  process.env.VUE_APP_CDSE_STAGING_OIDC_CLIENT_ID,
 	},
 
 	// Show a warning if HTTP is used instead of HTTPS
