@@ -18,7 +18,7 @@ export default {
 	skipLogin: true,
 
 	// Enables client credentials login method (true=enabled, false=disabled)
-	clientCredentials: true,
+	clientCredentials: false,
 
 	// Appends a slash to the end of the redirect URL (true=append, false=don't append)
 	redirectUrlAppendSlash: false,
